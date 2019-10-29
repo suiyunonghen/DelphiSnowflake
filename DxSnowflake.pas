@@ -1,5 +1,6 @@
 //Delphi版雪花算法
 //作者：不得闲
+//https://github.com/suiyunonghen/DelphiSnowflake
 //QQ: 75492895
 unit DxSnowflake;
 
@@ -14,8 +15,9 @@ type
     FLocker: TCriticalSection;
     fTime: Int64;
     fstep: int64;
+    FStartEpoch: Int64;
   public
-    constructor Create;
+    constructor Create(StartTime: TDateTime);
     destructor Destroy;override;
     property WorkerID: TWorkerID read FWorkerID write FWorkerID;
     function Generate: Int64;
@@ -45,9 +47,15 @@ begin
 end;
 { TDxSnowflake }
 
-constructor TDxSnowflake.Create;
+constructor TDxSnowflake.Create(StartTime: TDateTime);
 begin
   FLocker := TCriticalSection.Create;
+  if StartTime >= Now then
+    FStartEpoch := DateTimeToUnix(IncMinute(Now,-2))
+  else if YearOf(StartTime) < 1984 then
+    FStartEpoch := Epoch
+  else FStartEpoch := DateTimeToUnix(StartTime);
+  FStartEpoch := FStartEpoch * 1000;//ms
 end;
 
 
@@ -75,7 +83,7 @@ begin
     end
     else fstep := 0;
     fTime := curtime;
-    Result := (curtime - Epoch) shl timeShift or FWorkerID shl nodeShift  or fstep;
+    Result := (curtime - FStartEpoch) shl timeShift or FWorkerID shl nodeShift  or fstep;
   finally
     FLocker.Release;
   end;
