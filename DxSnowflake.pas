@@ -5,7 +5,8 @@
 unit DxSnowflake;
 
 interface
-uses Winapi.Windows, System.SysUtils,System.Generics.Collections,System.DateUtils;
+uses {$IF Defined(MSWINDOWS)}Winapi.Windows{$ELSEIF Defined(MACOS)}Macapi.Mach,Macapi.ObjCRuntime
+{$ELSEIF Defined(POSIX)}{$ENDIF},System.SysUtils,System.Generics.Collections,System.DateUtils;
 
 type
   TWorkerID = 0..1023;
@@ -29,7 +30,7 @@ type
 implementation
 
 const
-  Epoch: int64 = 1539615188000; //北京时间2018-10-15号
+  Epoch: int64 = 1539615188; //北京时间2018-10-15号
   //工作站的节点位数
   WorkerNodeBits:Byte = 10;
   //序列号的节点数
@@ -51,6 +52,10 @@ end;
 { TDxSnowflake }
 
 constructor TDxSnowflake.Create(StartTime: TDateTime);
+{$IF Defined(POSIX)}
+var
+  res: timespec;
+{$ENDIF}
 begin
   if StartTime >= Now then
     FStartEpoch := DateTimeToUnix(IncMinute(Now,-2))
@@ -59,18 +64,37 @@ begin
   else FStartEpoch := DateTimeToUnix(StartTime);
   FStartEpoch := FStartEpoch * 1000;//ms
   FStartUnix := DateTimeToUnix(Now) * 1000;
+  {$IF Defined(MSWINDOWS)}
   //获得系统的高性能频率计数器在一毫秒内的震动次数
   queryperformancefrequency(freq);
   QueryPerformanceCounter(startC);
+  {$ELSEIF Defined(MACOS)}
+  startC := AbsoluteToNanoseconds(mach_absolute_time) div 1000000;
+  {$ELSEIF Defined(POSIX)}
+  clock_gettime(CLOCK_MONOTONIC, @res);
+  startC := (Int64(1000000000) * res.tv_sec + res.tv_nsec) div 1000000;
+  {$ENDIF}
 end;
 
 
 function TDxSnowflake.CurrentUnix: Int64;
 var
   nend: Int64;
+{$IF Defined(POSIX)}
+  res: timespec;
+{$ENDIF}
 begin
+  {$IF Defined(MSWINDOWS)}
   QueryPerformanceCounter(nend);
   Result := FStartUnix + (nend - startC) * 1000 div freq;
+  {$ELSEIF Defined(MACOS)}
+  nend := AbsoluteToNanoseconds(mach_absolute_time) div 1000000;
+  Result := FStartUnix + nend - startC;
+  {$ELSEIF Defined(POSIX)}
+  clock_gettime(CLOCK_MONOTONIC, @res);
+  nend := (Int64(1000000000) * res.tv_sec + res.tv_nsec) div 1000000;
+  Result := FStartUnix + nend - startC;
+  {$ENDIF}
 end;
 
 destructor TDxSnowflake.Destroy;
