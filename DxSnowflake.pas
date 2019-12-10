@@ -5,17 +5,20 @@
 unit DxSnowflake;
 
 interface
-uses System.SysUtils,System.SyncObjs,System.Generics.Collections,System.DateUtils;
+uses Winapi.Windows, System.SysUtils,System.Generics.Collections,System.DateUtils;
 
 type
   TWorkerID = 0..1023;
   TDxSnowflake = class
   private
+    FStartUnix: int64;
     FWorkerID: TWorkerID;
-    FLocker: TCriticalSection;
     fTime: Int64;
     fstep: int64;
     FStartEpoch: Int64;
+    freq: Int64;
+    startC: Int64;
+    function CurrentUnix: Int64;
   public
     constructor Create(StartTime: TDateTime);
     destructor Destroy;override;
@@ -49,19 +52,29 @@ end;
 
 constructor TDxSnowflake.Create(StartTime: TDateTime);
 begin
-  FLocker := TCriticalSection.Create;
   if StartTime >= Now then
     FStartEpoch := DateTimeToUnix(IncMinute(Now,-2))
   else if YearOf(StartTime) < 1984 then
     FStartEpoch := Epoch
   else FStartEpoch := DateTimeToUnix(StartTime);
   FStartEpoch := FStartEpoch * 1000;//ms
+  FStartUnix := DateTimeToUnix(Now) * 1000;
+  //获得系统的高性能频率计数器在一毫秒内的震动次数
+  queryperformancefrequency(freq);
+  QueryPerformanceCounter(startC);
 end;
 
 
+function TDxSnowflake.CurrentUnix: Int64;
+var
+  nend: Int64;
+begin
+  QueryPerformanceCounter(nend);
+  Result := FStartUnix + (nend - startC) * 1000 div freq;
+end;
+
 destructor TDxSnowflake.Destroy;
 begin
-  FLocker.Free;
   inherited;
 end;
 
@@ -69,23 +82,23 @@ function TDxSnowflake.Generate: Int64;
 var
   curtime: Int64;
 begin
-  FLocker.Acquire;
+  TMonitor.Enter(Self);
   try
-    curtime := DateTimeToUnix(Now) * 1000;
+    curtime := CurrentUnix;//DateTimeToUnix(Now) * 1000;
     if curtime = fTime then
     begin
       fstep := (fstep + 1) and stepMask;
       if fstep = 0 then
       begin
         while curtime <= fTime do
-          curtime := DateTimeToUnix(Now) * 1000;
+          curtime := CurrentUnix;//DateTimeToUnix(Now) * 1000;
       end;
     end
     else fstep := 0;
     fTime := curtime;
     Result := (curtime - FStartEpoch) shl timeShift or FWorkerID shl nodeShift  or fstep;
   finally
-    FLocker.Release;
+    TMonitor.Exit(Self);
   end;
 end;
 
