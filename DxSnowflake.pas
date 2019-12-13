@@ -6,7 +6,7 @@ unit DxSnowflake;
 
 interface
 uses {$IF Defined(MSWINDOWS)}Winapi.Windows{$ELSEIF Defined(MACOS)}Macapi.Mach,Macapi.ObjCRuntime
-{$ELSEIF Defined(POSIX)}{$ENDIF},System.SysUtils,System.Generics.Collections,System.DateUtils;
+{$ELSEIF Defined(POSIX)}Posix.Time{$ENDIF},System.SysUtils,System.Generics.Collections,System.DateUtils;
 
 type
   TWorkerID = 0..1023;
@@ -59,13 +59,13 @@ var
 begin
   if StartTime >= Now then
     FStartEpoch := DateTimeToUnix(IncMinute(Now,-2))
-  else if YearOf(StartTime) < 1984 then
+  else if YearOf(StartTime) < 1950 then
     FStartEpoch := Epoch
   else FStartEpoch := DateTimeToUnix(StartTime);
   FStartEpoch := FStartEpoch * 1000;//ms
   FStartUnix := DateTimeToUnix(Now) * 1000;
-  {$IF Defined(MSWINDOWS)}
   //获得系统的高性能频率计数器在一毫秒内的震动次数
+  {$IF Defined(MSWINDOWS)}
   queryperformancefrequency(freq);
   QueryPerformanceCounter(startC);
   {$ELSEIF Defined(MACOS)}
